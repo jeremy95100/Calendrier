@@ -31,10 +31,56 @@ export default async function handler(req, res) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return res.status(500).json({ error: 'Clés VAPID manquantes' });
   webpush.setVapidDetails(VAPID_SUBJECT || 'mailto:ma-semaine@example.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 
+  const params = new URL(req.url, 'http://x').searchParams;
+  const loadSubs = async () => {
+    const flat = (await redis(['HGETALL', KEYS.subs])) || [];
+    const subs = [];
+    for (let i = 0; i < flat.length; i += 2) subs.push(JSON.parse(flat[i + 1]));
+    return subs;
+  };
+  const push = async (subs, payload) => {
+    let sent = 0;
+    const errors = [];
+    for (const sub of subs) {
+      try {
+        await webpush.sendNotification(sub, payload, { TTL: 3600, urgency: 'high' });
+        sent++;
+      } catch (e) {
+        errors.push(e.statusCode || e.message);
+        // Abonnement expiré (app supprimée, notifications coupées…) : on l'oublie
+        if (e.statusCode === 404 || e.statusCode === 410) await redis(['HDEL', KEYS.subs, sub.endpoint]);
+      }
+    }
+    return { sent, errors };
+  };
+
   try {
     const tz = (await redis(['GET', KEYS.tz])) || 'Europe/Paris';
     const now = nowIn(tz);
     const tasks = JSON.parse((await redis(['GET', KEYS.tasks])) || '[]');
+
+    // ?test=1 : envoie tout de suite une notification de test
+    if (params.get('test')) {
+      const subs = await loadSubs();
+      const r = await push(subs, JSON.stringify({ title: '🔔 Test Ma Semaine', body: 'Les notifications fonctionnent !', tag: 'test' }));
+      return res.status(200).json({ subscriptions: subs.length, ...r });
+    }
+
+    // ?diag=1 : état du système, sans rien envoyer
+    if (params.get('diag')) {
+      const subs = await loadSubs();
+      const urgent = tasks.filter(t => t.prio === 'high' && !t.done && !t.deleted && t.date >= now.date);
+      return res.status(200).json({
+        tz, now,
+        lastCronCall: await redis(['GET', KEYS.lastCron]),
+        subscriptions: subs.map(s => new URL(s.endpoint).host),
+        urgentUpcoming: urgent.map(t => ({ date: t.date, time: t.time || null })),
+        totalTasks: tasks.filter(t => !t.deleted).length,
+        byUrgency: ['high', 'mid', 'low'].map(p => tasks.filter(t => !t.deleted && t.prio === p).length),
+      });
+    }
+
+    await redis(['SET', KEYS.lastCron, new Date().toISOString()]);
 
     const due = tasks.filter(t => {
       if (t.prio !== 'high' || t.done || t.deleted || t.date !== now.date) return false;
@@ -46,9 +92,7 @@ export default async function handler(req, res) {
     });
     if (!due.length) return res.status(200).json({ sent: 0 });
 
-    const flat = (await redis(['HGETALL', KEYS.subs])) || [];
-    const subs = [];
-    for (let i = 0; i < flat.length; i += 2) subs.push(JSON.parse(flat[i + 1]));
+    const subs = await loadSubs();
 
     let sent = 0;
     for (const t of due) {
@@ -61,15 +105,7 @@ export default async function handler(req, res) {
         body: t.title + (t.note ? '\n' + t.note : ''),
         tag: t.id,
       });
-      for (const sub of subs) {
-        try {
-          await webpush.sendNotification(sub, payload, { TTL: 3600, urgency: 'high' });
-          sent++;
-        } catch (e) {
-          // Abonnement expiré (app supprimée, notifications coupées…) : on l'oublie
-          if (e.statusCode === 404 || e.statusCode === 410) await redis(['HDEL', KEYS.subs, sub.endpoint]);
-        }
-      }
+      sent += (await push(subs, payload)).sent;
     }
     return res.status(200).json({ sent });
   } catch (e) {

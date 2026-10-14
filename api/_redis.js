@@ -6,6 +6,7 @@ export const KEYS = {
   tasks: 'ma-semaine:tasks',
   subs: 'ma-semaine:push-subs',
   tz: 'ma-semaine:tz',
+  lastCron: 'ma-semaine:last-cron',
   notified: id => `ma-semaine:notified:${id}`,
 };
 
