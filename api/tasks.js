@@ -2,6 +2,7 @@
 // Variables d'environnement (ajoutées automatiquement par l'intégration Upstash) :
 //   KV_REST_API_URL / KV_REST_API_TOKEN
 import { redis, KEYS, REDIS_URL, REDIS_TOKEN } from './_redis.js';
+import { scheduleReminders } from './_schedule.js';
 
 const TOMBSTONE_TTL = 30 * 86400000;
 const MAX_TASKS = 5000;
@@ -50,6 +51,10 @@ export default async function handler(req, res) {
     const incoming = Array.isArray(req.body?.tasks) ? req.body.tasks.map(clean).filter(Boolean) : [];
     const merged = merge(stored.map(clean).filter(Boolean), incoming).slice(0, MAX_TASKS);
     await redis(['SET', KEYS.tasks, JSON.stringify(merged)]);
+    try {
+      const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || req.headers['x-forwarded-host'] || req.headers.host;
+      await scheduleReminders(merged, `https://${host}`);
+    } catch {} // un souci de programmation ne doit pas bloquer la sauvegarde
     return res.status(200).json({ tasks: merged });
   } catch (e) {
     return res.status(502).json({ error: 'Stockage indisponible' });

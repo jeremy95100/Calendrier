@@ -1,14 +1,15 @@
-// Envoie les rappels des tâches URGENTES. À appeler toutes les 5 minutes par un cron :
+// Envoie les rappels des tâches URGENTES. Appelé par QStash à l'heure de chaque rappel
+// (programmé dans _schedule.js), et éventuellement par un cron externe en secours :
 //   GET /api/notify   avec l'en-tête  Authorization: Bearer <CRON_SECRET>   (ou ?key=<CRON_SECRET>)
 // Règles :
-//   - tâche urgente avec heure : rappel 15 min avant (jusqu'à 1 h après si le cron a du retard)
+//   - tâche urgente avec heure : rappel 15 min avant (jusqu'à 1 h après en cas de retard)
 //   - tâche urgente sans heure : rappel le jour même à partir de 8 h
 // Chaque rappel n'est envoyé qu'une seule fois.
 import webpush from 'web-push';
 import { redis, KEYS } from './_redis.js';
+import { BEFORE_MIN, MORNING } from './_schedule.js';
 
-const BEFORE_MIN = 15;
-const MORNING_MIN = 8 * 60;
+const MORNING_MIN = +MORNING.slice(0, 2) * 60;
 
 function nowIn(tz) {
   const parts = Object.fromEntries(

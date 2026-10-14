@@ -730,7 +730,16 @@ async function sync() {
     if (syncAgain) { syncAgain = false; sync(); }
   }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sync(); });
+// Ouvrir l'app = notifications lues : on efface la pastille rouge de l'icône
+function clearBadge() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(reg => reg.active && reg.active.postMessage('clear-badge')).catch(() => {});
+  if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {});
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { sync(); clearBadge(); }
+});
+clearBadge();
 window.addEventListener('online', sync);
 setInterval(() => { if (document.visibilityState === 'visible') sync(); }, 60000);
 
