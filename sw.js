@@ -1,5 +1,5 @@
 // Cache hors-ligne : l'app fonctionne même sans réseau
-const CACHE = 'ma-semaine-v6';
+const CACHE = 'ma-semaine-v7';
 const BADGE_CACHE = 'ma-semaine-badge';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon.svg', 'icon-512.png'];
 

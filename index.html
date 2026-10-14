@@ -51,6 +51,8 @@
 
   /* Ajout rapide */
   .quick { display: flex; gap: 8px; padding: 4px 16px 8px; position: sticky; z-index: 4; background: var(--bg); }
+  .add-big { flex: 1; height: 54px; border: 0; border-radius: 16px; background: var(--accent-strong); color: #fff;
+    font-size: 18px; font-weight: 700; box-shadow: 0 6px 18px var(--shadow); }
   .quick input { flex: 1; min-width: 0; height: 52px; border-radius: 14px; border: 1px solid var(--line);
     background: var(--card); padding: 0 14px; font-size: 17px; }
   .quick button { height: 52px; border: 0; border-radius: 14px; padding: 0 18px; background: var(--accent-strong);
@@ -195,16 +197,12 @@
     <button id="notifBtn" hidden>Activer</button>
   </div>
 
-  <form class="quick" id="quick" autocomplete="off">
-    <button type="button" class="urg" id="quickUrg" data-p="mid" aria-label="Urgence : normal (toucher pour changer)">🟠</button>
-    <label for="quickInput" class="sr-only">Ajouter rapidement une tâche</label>
-    <input id="quickInput" enterkeyhint="done" maxlength="120" placeholder="Ajouter une tâche…">
-    <button type="submit">Ajouter</button>
-  </form>
+  <div class="quick" id="quick">
+    <button class="add-big" id="addBtn">＋ Ajouter une tâche</button>
+  </div>
 
   <main id="view"></main>
 
-  <button class="fab" id="fab" aria-label="Nouvelle tâche détaillée">+</button>
 
   <nav class="tabs" aria-label="Vues du calendrier">
     <div class="tabs-inner" role="tablist">
@@ -221,15 +219,19 @@
     <label for="fTitle">Quoi ?</label>
     <input id="fTitle" required maxlength="120" placeholder="Ex : Appeler le garage">
     <div class="row">
-      <div><label for="fDate">Jour</label><input id="fDate" type="date" required></div>
-      <div><label for="fTime">Heure</label><input id="fTime" type="time"></div>
+      <div><label for="fDate">Jour (début)</label><input id="fDate" type="date" required></div>
+      <div><label for="fEnd">Jusqu'au <small>(si plusieurs jours)</small></label><input id="fEnd" type="date"></div>
     </div>
-    <label for="fDur">Durée</label>
-    <select id="fDur">
-      <option value="">Pas de durée</option><option value="15">15 min</option><option value="30">30 min</option>
-      <option value="60">1 h</option><option value="90">1 h 30</option><option value="120">2 h</option>
-      <option value="180">3 h</option><option value="240">4 h</option>
-    </select>
+    <div class="row">
+      <div><label for="fTime">Heure</label><input id="fTime" type="time"></div>
+      <div><label for="fDur">Durée</label>
+        <select id="fDur">
+          <option value="">—</option><option value="15">15 min</option><option value="30">30 min</option>
+          <option value="60">1 h</option><option value="90">1 h 30</option><option value="120">2 h</option>
+          <option value="180">3 h</option><option value="240">4 h</option>
+        </select>
+      </div>
+    </div>
     <label id="prioLabel">Urgence</label>
     <div class="prio" id="prio" role="group" aria-labelledby="prioLabel">
       <button type="button" data-p="high">🔴 Urgent</button>
@@ -316,14 +318,26 @@ function sortTasks(a, b) {
   if (b.time) return 1;
   return prioOrder[a.prio] - prioOrder[b.prio];
 }
+// Tâche sur plusieurs jours : de t.date à t.endDate (inclus)
+const endOf = t => (t.endDate && t.endDate > t.date ? t.endDate : t.date);
+const covers = (t, d) => t.date <= d && d <= endOf(t);
+const overlaps = (t, a, b) => t.date <= b && endOf(t) >= a;
+const daysBetween = (a, b) => Math.round((fromIso(b) - fromIso(a)) / 86400000);
+function rangeLabel(t) {
+  const o = { day: 'numeric', month: 'short' };
+  return `du ${fmt(fromIso(t.date), o)} au ${fmt(fromIso(endOf(t)), o)}`;
+}
 const byDate = (a, b) => a.date.localeCompare(b.date) || sortTasks(a, b);
 const sumMins = list => list.filter(t => !t.done).reduce((s, t) => s + (+t.dur || 0), 0);
 
 /* ---------- Affichage ---------- */
-function taskRow(t, showDate) {
-  const late = !t.done && t.date < todayIso();
+function taskRow(t, showDate, day) {
+  const late = !t.done && endOf(t) < todayIso();
   const meta = [];
-  if (showDate) meta.push(`<span class="${late ? 'late' : ''}">${esc(relDay(t.date))}</span>`);
+  if (endOf(t) !== t.date) {
+    const n = daysBetween(t.date, endOf(t)) + 1;
+    meta.push(`<span class="${late ? 'late' : ''}">📆 ${esc(rangeLabel(t))}${day ? ` · jour ${daysBetween(t.date, day) + 1}/${n}` : ''}</span>`);
+  } else if (showDate) meta.push(`<span class="${late ? 'late' : ''}">${esc(relDay(t.date))}</span>`);
   if (t.time) meta.push('🕒 ' + t.time);
   if (t.dur) meta.push(fmtDur(+t.dur));
   const prioName = PRIO_NAMES[t.prio];
@@ -361,14 +375,14 @@ function dayCard(date, list) {
         </div>
         <button class="add-day" data-add="${date}" aria-label="Ajouter une tâche ${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}">+</button>
       </div>
-      ${list.length ? list.sort(sortTasks).map(t => taskRow(t)).join('') : '<div class="empty">Rien de prévu</div>'}
+      ${list.length ? list.sort(sortTasks).map(t => taskRow(t, false, date)).join('') : '<div class="empty">Rien de prévu</div>'}
     </section>`;
 }
 
 function renderDay() {
   const date = iso(cursor);
-  const list = live().filter(t => t.date === date);
-  const late = date === todayIso() ? live().filter(t => !t.done && t.date < date).sort(byDate) : [];
+  const list = live().filter(t => covers(t, date));
+  const late = date === todayIso() ? live().filter(t => !t.done && endOf(t) < date).sort(byDate) : [];
   let html = progressCard(list, 'Avancement du jour') + dayCard(date, list);
   if (late.length) {
     html += `
@@ -384,9 +398,9 @@ function renderDay() {
 function renderWeek() {
   const start = mondayOf(cursor);
   const dates = Array.from({ length: 7 }, (_, i) => iso(addDays(start, i)));
-  const list = live().filter(t => dates.includes(t.date));
+  const list = live().filter(t => overlaps(t, dates[0], dates[6]));
   return progressCard(list, 'Avancement de la semaine')
-    + dates.map(d => dayCard(d, list.filter(t => t.date === d))).join('')
+    + dates.map(d => dayCard(d, list.filter(t => covers(t, d)))).join('')
     + `<button class="wide-btn" data-carry>↪ Reporter le non-fait à la semaine suivante</button>`;
 }
 
@@ -395,13 +409,13 @@ function renderMonth() {
   const start = mondayOf(first);
   const month = first.getMonth();
   const all = live();
-  const monthList = all.filter(t => fromIso(t.date).getMonth() === month && fromIso(t.date).getFullYear() === first.getFullYear());
+  const monthList = all.filter(t => overlaps(t, iso(first), iso(new Date(first.getFullYear(), month + 1, 0))));
   let cells = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'].map(d => `<div class="dow" aria-hidden="true">${d}</div>`).join('');
   for (let i = 0; i < 42; i++) {
     const d = addDays(start, i);
     if (i === 35 && d.getMonth() !== month) break;
     const s = iso(d);
-    const dayList = all.filter(t => t.date === s).sort(sortTasks);
+    const dayList = all.filter(t => covers(t, s)).sort(sortTasks);
     const dots = dayList.slice(0, 4).map(t => `<span class="dot p-${t.prio} ${t.done ? 'done' : ''}"></span>`).join('');
     cells += `
       <button class="mday ${d.getMonth() !== month ? 'out' : ''} ${s === todayIso() ? 'today' : ''}" data-goto="${s}"
@@ -422,8 +436,8 @@ function renderAll() {
   const all = live();
   const q = searchText.trim().toLowerCase();
   const match = t => !q || (t.title + ' ' + (t.note || '')).toLowerCase().includes(q);
-  const late = all.filter(t => !t.done && t.date < t0);
-  const today = all.filter(t => t.date === t0);
+  const late = all.filter(t => !t.done && endOf(t) < t0);
+  const today = all.filter(t => covers(t, t0));
   const upcoming = all.filter(t => !t.done && t.date > t0);
   const done = all.filter(t => t.done);
 
@@ -433,7 +447,7 @@ function renderAll() {
     ['Cette semaine', all.filter(t => t.date > t0 && t.date <= weekEnd && (showDone || !t.done))],
     ['Plus tard', all.filter(t => t.date > weekEnd && (showDone || !t.done))],
   ];
-  if (showDone) groups.push(['Faites (passées)', done.filter(t => t.date < t0)]);
+  if (showDone) groups.push(['Faites (passées)', done.filter(t => endOf(t) < t0)]);
 
   let html = `
     <div class="tiles">
@@ -458,7 +472,7 @@ function renderAll() {
         ${items.map(t => taskRow(t, true)).join('')}
       </section>`;
   }
-  if (!any) html += `<div class="card empty">${q ? 'Aucune tâche trouvée' : 'Rien à faire 🎉 Ajoute une tâche ci-dessus.'}</div>`;
+  if (!any) html += `<div class="card empty">${q ? 'Aucune tâche trouvée' : 'Rien à faire 🎉 Touche « Ajouter une tâche ».'}</div>`;
   return html;
 }
 
@@ -527,6 +541,8 @@ function openSheet(task, date) {
   $('sheetTitle').textContent = task ? 'Modifier la tâche' : 'Nouvelle tâche';
   $('fTitle').value = task ? task.title : '';
   $('fDate').value = task ? task.date : (date || targetDate());
+  $('fEnd').value = task ? task.endDate || '' : '';
+  $('fEnd').min = $('fDate').value;
   $('fTime').value = task ? task.time || '' : '';
   $('fDur').value = task ? task.dur || '' : '';
   $('fNote').value = task ? task.note || '' : '';
@@ -561,6 +577,7 @@ $('sheet').addEventListener('submit', e => {
   e.preventDefault();
   const data = {
     title: $('fTitle').value.trim(), date: $('fDate').value, time: $('fTime').value,
+    endDate: $('fEnd').value > $('fDate').value ? $('fEnd').value : '',
     dur: $('fDur').value, note: $('fNote').value.trim(), prio,
   };
   if (!data.title || !data.date) return;
@@ -571,7 +588,7 @@ $('sheet').addEventListener('submit', e => {
   save();
   closeSheet();
   render();
-  toast(editing ? 'Modifié ✓' : `Ajouté pour ${relDay(data.date).toLowerCase()} ✓`);
+  toast(editing ? 'Modifié ✓' : data.endDate ? `Ajouté ${rangeLabel(data)} ✓` : `Ajouté pour ${relDay(data.date).toLowerCase()} ✓`);
 });
 
 $('del').addEventListener('click', () => {
@@ -581,35 +598,17 @@ $('del').addEventListener('click', () => {
   save(); closeSheet(); render();
   toast('Tâche supprimée', 'Annuler', () => { t.deleted = false; touch(t); save(); render(); });
 });
+$('fDate').addEventListener('change', () => {
+  $('fEnd').min = $('fDate').value;
+  if ($('fEnd').value && $('fEnd').value <= $('fDate').value) $('fEnd').value = '';
+});
 $('cancel').addEventListener('click', closeSheet);
 $('sheetBg').addEventListener('click', closeSheet);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('sheet').classList.contains('open')) closeSheet(); });
 $('prio').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setPrio(b.dataset.p); });
 
-/* ---------- Ajout rapide ---------- */
-$('quick').addEventListener('submit', e => {
-  e.preventDefault();
-  const title = $('quickInput').value.trim();
-  if (!title) { $('quickInput').focus(); return; }
-  const date = targetDate();
-  const p = $('quickUrg').dataset.p;
-  if (p === 'high') askNotifications();
-  tasks.push(touch({ id: newId(), title, date, time: '', dur: '', note: '', prio: p, done: false }));
-  save();
-  $('quickInput').value = '';
-  setQuickUrg('mid');
-  render();
-  toast(`Ajouté pour ${relDay(date).toLowerCase()} ✓`);
-});
-function setQuickUrg(p) {
-  $('quickUrg').dataset.p = p;
-  $('quickUrg').textContent = PRIO_ICONS[p];
-  $('quickUrg').setAttribute('aria-label', `Urgence : ${PRIO_NAMES[p]} (toucher pour changer)`);
-}
-$('quickUrg').addEventListener('click', () => {
-  setQuickUrg({ mid: 'high', high: 'low', low: 'mid' }[$('quickUrg').dataset.p]);
-  toast(`${PRIO_ICONS[$('quickUrg').dataset.p]} ${PRIO_NAMES[$('quickUrg').dataset.p][0].toUpperCase() + PRIO_NAMES[$('quickUrg').dataset.p].slice(1)}`);
-});
+/* ---------- Bouton Ajouter : ouvre directement le formulaire ---------- */
+$('addBtn').addEventListener('click', () => openSheet());
 
 /* ---------- Actions dans la vue ---------- */
 $('view').addEventListener('click', e => {
@@ -631,12 +630,15 @@ $('view').addEventListener('click', e => {
   if (go) { cursor = fromIso(go.dataset.goto); return setView('day'); }
   if (e.target.closest('[data-move-late]')) {
     const t0 = todayIso();
-    const late = live().filter(t => !t.done && t.date < t0);
-    const before = late.map(t => [t, t.date]);
-    late.forEach(t => { t.date = t0; touch(t); });
+    const late = live().filter(t => !t.done && endOf(t) < t0);
+    const before = late.map(t => [t, t.date, t.endDate]);
+    late.forEach(t => {
+      const span = daysBetween(t.date, endOf(t));
+      t.date = t0; t.endDate = span ? iso(addDays(fromIso(t0), span)) : ''; touch(t);
+    });
     save(); render();
     return toast(`${late.length} tâche(s) mise(s) à aujourd'hui`, 'Annuler', () => {
-      before.forEach(([t, d]) => { t.date = d; touch(t); }); save(); render();
+      before.forEach(([t, d, e]) => { t.date = d; t.endDate = e; touch(t); }); save(); render();
     });
   }
   if (e.target.closest('[data-carry]')) {
@@ -644,13 +646,17 @@ $('view').addEventListener('click', e => {
     const dates = Array.from({ length: 7 }, (_, i) => iso(addDays(s, i)));
     const todo = live().filter(t => dates.includes(t.date) && !t.done);
     if (!todo.length) return toast('Tout est fait cette semaine 🎉');
-    const before = todo.map(t => [t, t.date]);
-    todo.forEach(t => { t.date = iso(addDays(fromIso(t.date), 7)); touch(t); });
+    const before = todo.map(t => [t, t.date, t.endDate]);
+    todo.forEach(t => {
+      t.date = iso(addDays(fromIso(t.date), 7));
+      if (t.endDate) t.endDate = iso(addDays(fromIso(t.endDate), 7));
+      touch(t);
+    });
     save();
     cursor = addDays(s, 7);
     render(); scrollTo(0, 0);
     toast(`${todo.length} tâche(s) reportée(s)`, 'Annuler', () => {
-      before.forEach(([t, d]) => { t.date = d; touch(t); }); cursor = s; save(); render();
+      before.forEach(([t, d, e]) => { t.date = d; t.endDate = e; touch(t); }); cursor = s; save(); render();
     });
   }
 });
@@ -675,7 +681,6 @@ $('todayBtn').addEventListener('click', () => {
   if (view === 'week') scrollToToday(); else scrollTo(0, 0);
 });
 document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
-$('fab').addEventListener('click', () => openSheet());
 
 // Balayer gauche/droite pour changer de période
 let sx = null, sy = null;

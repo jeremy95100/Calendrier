@@ -14,6 +14,7 @@ function clean(t) {
     id: t.id,
     title: s(t.title, 120),
     date: s(t.date, 10),
+    endDate: s(t.endDate, 10),
     time: s(t.time, 5),
     dur: s(String(t.dur ?? ''), 4),
     note: s(t.note, 500),
