@@ -1,14 +1,17 @@
 {
+  "id": "/",
   "name": "Ma Semaine",
   "short_name": "Ma Semaine",
-  "description": "Mes tâches et mon calendrier de la semaine",
+  "description": "Mes tâches et mon calendrier",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "lang": "fr",
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

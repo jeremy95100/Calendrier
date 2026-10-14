@@ -1,6 +1,6 @@
 // Cache hors-ligne : l'app fonctionne même sans réseau
-const CACHE = 'ma-semaine-v4';
-const FILES = ['./', 'index.html', 'manifest.json', 'icon.svg'];
+const CACHE = 'ma-semaine-v5';
+const FILES = ['./', 'index.html', 'manifest.json', 'icon.svg', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
@@ -29,7 +29,7 @@ self.addEventListener('push', e => {
   e.waitUntil(self.registration.showNotification(data.title || '🔴 Tâche urgente', {
     body: data.body || '',
     tag: data.tag,
-    icon: 'icon.svg',
+    icon: 'icon-512.png',
     badge: 'icon.svg',
     requireInteraction: true,
     data: { url: '/' },
