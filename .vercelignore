@@ -1,0 +1,4 @@
+dev.mjs
+.dev-data.json
+.env*
+node_modules

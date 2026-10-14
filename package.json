@@ -1,0 +1,14 @@
+{
+  "name": "ma-semaine",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node dev.mjs"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}

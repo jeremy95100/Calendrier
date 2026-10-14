@@ -1,0 +1,4 @@
+.dev-data.json
+.vercel
+node_modules
+.env*
